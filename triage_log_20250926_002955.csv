@@ -1,0 +1,2 @@
+timestamp,type,patient_id,breathing_rate,is_breathing,is_responsive,confidence
+1758870535.8642838,detection,disaster_patient_1,42.491732292396684,True,False,0.6560255824860809

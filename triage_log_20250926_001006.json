@@ -1,0 +1,64 @@
+[
+  {
+    "timestamp": 1758870535.8642838,
+    "type": "detection",
+    "patient_id": "disaster_patient_1",
+    "breathing_rate": 42.491732292396684,
+    "is_breathing": true,
+    "is_responsive": false,
+    "confidence": 0.6560255824860809
+  },
+  {
+    "timestamp": 1758870535.866962,
+    "type": "triage_decision",
+    "patient_id": "disaster_patient_1",
+    "ai_suggestion": "RED",
+    "confidence": 0.6246718124828748,
+    "human_override": null,
+    "final_decision": "RED",
+    "reasoning": "Abnormal respiratory rate: 42.5 bpm"
+  },
+  {
+    "timestamp": 1758870535.866626,
+    "type": "detection",
+    "patient_id": "disaster_patient_2",
+    "breathing_rate": 19.589690225902288,
+    "is_breathing": true,
+    "is_responsive": true,
+    "confidence": 0.8723609490730283
+  },
+  {
+    "timestamp": 1758870535.867008,
+    "type": "triage_decision",
+    "patient_id": "disaster_patient_2",
+    "ai_suggestion": "GREEN",
+    "confidence": 0.8887439572368828,
+    "human_override": null,
+    "final_decision": "GREEN",
+    "reasoning": "Breathing and responsive"
+  },
+  {
+    "timestamp": 1758870535.866741,
+    "type": "detection",
+    "patient_id": "disaster_patient_3",
+    "breathing_rate": 12.880594689989648,
+    "is_breathing": true,
+    "is_responsive": false,
+    "confidence": 0.8527924635696478
+  },
+  {
+    "timestamp": 1758870535.867033,
+    "type": "triage_decision",
+    "patient_id": "disaster_patient_3",
+    "ai_suggestion": "YELLOW",
+    "confidence": 0.6706254146852634,
+    "human_override": null,
+    "final_decision": "YELLOW",
+    "reasoning": "Breathing but unresponsive"
+  },
+  {
+    "timestamp": 1758870551.1760519,
+    "type": "detection",
+    "patient_id": "video_patient_7_3",
+    "breathing_rate": 0.0,
+    "is_breathing": 
