@@ -24,21 +24,27 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
   const nextIdRef = useRef<number>(0);
 
   const [isDetecting, setIsDetecting] = useState(false);
+  const [isModelLoading, setIsModelLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Load TensorFlow.js model
   const loadModel = useCallback(async () => {
     try {
       console.log('🔍 Loading COCO-SSD model...');
+      console.log('🔍 TensorFlow.js ready state:', tf.getBackend());
       await tf.ready();
+      console.log('✅ TensorFlow.js ready');
+      
       const model = await cocoSsd.load({
         base: 'lite_mobilenet_v2'
       });
       modelRef.current = model;
+      setIsModelLoading(false);
       console.log('✅ COCO-SSD model loaded successfully');
       setError(null);
     } catch (err) {
       console.error('❌ Error loading model:', err);
+      setIsModelLoading(false);
       setError(`Failed to load model: ${err}`);
     }
   }, []);
@@ -192,6 +198,11 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
       return;
     }
 
+    if (!videoRef.current?.src) {
+      console.log('⚠️ No video loaded yet');
+      return;
+    }
+
     setIsDetecting(true);
     console.log('🎯 Starting person detection...');
   }, []);
@@ -289,10 +300,12 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
         
         <button
           onClick={startDetection}
-          disabled={!modelRef.current || isDetecting}
+          disabled={isModelLoading || isDetecting || !videoRef.current?.src}
           className="control-btn start"
         >
-          {isDetecting ? '🎯 Detecting...' : '▶️ Start Detection'}
+          {isModelLoading ? '⏳ Loading Model...' : 
+           !videoRef.current?.src ? '📹 Upload Video First' :
+           isDetecting ? '🎯 Detecting...' : '▶️ Start Detection'}
         </button>
 
         <button
@@ -311,11 +324,13 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
       )}
 
       <div className="status">
-        Model: {modelRef.current ? '✅ Loaded' : '⏳ Loading...'}
+        Model: {isModelLoading ? '⏳ Loading...' : modelRef.current ? '✅ Loaded' : '❌ Failed'}
         <br />
         Detection: {isDetecting ? '🎯 Active' : '⏸️ Stopped'}
         <br />
         Persons: {boxesRef.current.length}
+        <br />
+        Video: {videoRef.current?.src ? '📹 Loaded' : '❌ No Video'}
       </div>
     </div>
   );
