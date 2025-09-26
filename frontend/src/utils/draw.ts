@@ -1,3 +1,5 @@
+// Canvas drawing utilities for patient overlays
+
 import { PatientState, TriageDecision } from '../types';
 
 export interface DrawContext {
@@ -24,12 +26,18 @@ export const drawPatientOverlay = (
   decision?: TriageDecision
 ) => {
   const { ctx, videoWidth, videoHeight } = context;
-  
+
   // Convert normalized coordinates to pixel coordinates
   const x = patient.bbox.x * videoWidth;
   const y = patient.bbox.y * videoHeight;
   const w = patient.bbox.w * videoWidth;
   const h = patient.bbox.h * videoHeight;
+
+  console.log(`🎯 Drawing overlay for ${patient.id}:`, {
+    bbox: patient.bbox,
+    pixelCoords: { x, y, w, h },
+    videoSize: { videoWidth, videoHeight }
+  });
 
   const category = decision?.category || 'UNKNOWN';
   const color = getTriageColor(category);

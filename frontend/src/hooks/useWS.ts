@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+// WebSocket connection management
+
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PatientState, TriageDecision, OverrideRequest } from '../types';
 
 export interface WebSocketState {
@@ -7,7 +9,7 @@ export interface WebSocketState {
   triageDecisions: Map<string, TriageDecision>;
 }
 
-export const useWebSocket = () => {
+export const useWS = () => {
   const [wsState, setWsState] = useState<WebSocketState>({
     connected: false,
     error: null,
@@ -19,27 +21,21 @@ export const useWebSocket = () => {
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectingRef = useRef<boolean>(false);
   const shouldReconnectRef = useRef<boolean>(true);
-  const lastConnectTimeRef = useRef<number>(0);
-  const isInitializedRef = useRef<boolean>(false);
 
   const connect = useCallback(() => {
-    // Don't connect if already connected or connecting
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
-      console.log('🔌 WebSocket already connected or connecting, skipping...');
       return;
     }
 
     if (isConnectingRef.current) {
-      console.log('🔌 WebSocket connection already in progress, skipping...');
       return;
     }
 
     if (!shouldReconnectRef.current) {
-      console.log('🔌 WebSocket reconnection disabled, skipping...');
       return;
     }
 
-    console.log('🔌 Creating new WebSocket connection...');
+    console.log('🔌 Connecting to WebSocket...');
     isConnectingRef.current = true;
     
     try {
@@ -47,7 +43,7 @@ export const useWebSocket = () => {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('🔗 WebSocket connected');
+        console.log('✅ WebSocket connected');
         isConnectingRef.current = false;
         setWsState(prev => ({ ...prev, connected: true, error: null }));
         
@@ -62,18 +58,15 @@ export const useWebSocket = () => {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('📨 WebSocket message received:', data);
           
           if (data.type === 'triage_decision') {
             const decision: TriageDecision = data.decision;
-            console.log('🏥 Triage decision received:', decision);
             setWsState(prev => ({
               ...prev,
               triageDecisions: new Map(prev.triageDecisions).set(decision.id, decision)
             }));
           } else if (data.type === 'pong') {
             // Heartbeat response
-            console.log('💓 Heartbeat response received');
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -91,13 +84,13 @@ export const useWebSocket = () => {
           heartbeatIntervalRef.current = null;
         }
 
-        // Only reconnect if it wasn't a manual close (code 1000) and reconnection is enabled
+        // Reconnect if not manual close
         if (event.code !== 1000 && shouldReconnectRef.current && !reconnectTimeoutRef.current) {
-          console.log('🔌 Scheduling reconnection in 5 seconds...');
+          console.log('🔌 Scheduling reconnection...');
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectTimeoutRef.current = null;
             connect();
-          }, 5000);
+          }, 3000);
         }
       };
 
@@ -115,9 +108,8 @@ export const useWebSocket = () => {
   }, []);
 
   const disconnect = useCallback(() => {
-    console.log('🔌 useWebSocket: Disconnecting...');
+    console.log('🔌 Disconnecting WebSocket...');
     
-    // Disable reconnection
     shouldReconnectRef.current = false;
     
     if (reconnectTimeoutRef.current) {
@@ -131,7 +123,6 @@ export const useWebSocket = () => {
     }
 
     if (wsRef.current) {
-      console.log('🔌 useWebSocket: Closing WebSocket...');
       wsRef.current.close(1000, 'Manual disconnect');
       wsRef.current = null;
     }
@@ -140,11 +131,11 @@ export const useWebSocket = () => {
     setWsState(prev => ({ ...prev, connected: false }));
   }, []);
 
-  const sendPatientState = useCallback((patientState: PatientState) => {
+  const sendPatientStates = useCallback((patients: PatientState[]) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
-        type: 'patient_state',
-        data: patientState
+        type: 'patient_states',
+        data: patients
       }));
     }
   }, []);
@@ -194,33 +185,26 @@ export const useWebSocket = () => {
     }
   }, []);
 
-  // Initialize connection ONCE
+  // Auto-connect on mount
   useEffect(() => {
-    console.log('🔌 useWebSocket: Auto-connecting...');
+    console.log('🔌 Auto-connecting WebSocket...');
     shouldReconnectRef.current = true;
     
-    // Add a small delay to prevent rapid connections
     const connectTimeout = setTimeout(() => {
       connect();
     }, 1000);
     
     return () => {
-      console.log('🔌 useWebSocket: Disconnecting...');
       clearTimeout(connectTimeout);
       disconnect();
     };
-  }, [connect]);
-
-  const manualConnect = useCallback(() => {
-    shouldReconnectRef.current = true;
-    connect();
-  }, [connect]);
+  }, [connect, disconnect]);
 
   return {
     ...wsState,
-    connect: manualConnect,
+    connect,
     disconnect,
-    sendPatientState,
+    sendPatientStates,
     sendOverride,
     exportLogs
   };

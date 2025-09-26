@@ -1,13 +1,8 @@
-// TypeScript interfaces matching the specified data contracts
+// TypeScript interfaces for data contracts
 
 export interface PatientState {
   id: string;
-  bbox: {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  };
+  bbox: { x: number; y: number; w: number; h: number }; // normalized 0..1
   rr_bpm?: number | null;
   breathing: boolean | null; // true/false/unknown
   movement: "purposeful" | "low" | "none" | "unknown";
@@ -16,8 +11,8 @@ export interface PatientState {
     breathingPresent?: boolean | null;
     snr?: number | null;
   };
-  signal_q: number; // 0..1 ROI stability/quality
-  det_conf: number; // 0..1 detector confidence
+  signal_q: number; // 0..1: ROI stability/quality heuristic
+  det_conf: number; // 0..1: detector confidence
   ts: number; // epoch ms
 }
 
@@ -25,7 +20,7 @@ export interface TriageDecision {
   id: string;
   category: "RED" | "YELLOW" | "GREEN" | "BLACK" | "UNKNOWN";
   confidence: number; // 0..1
-  reason: string; // e.g., "RR=34; No purposeful movement"
+  reason: string;
   ts: number;
 }
 
@@ -36,15 +31,17 @@ export interface OverrideRequest {
   ts: number;
 }
 
-export interface EventLogEntry {
-  id: string;
-  timestamp: number;
-  ai: boolean; // true for AI decisions, false for overrides
-  patient_id: string;
-  category: string;
-  confidence: number;
-  reason: string;
-  override_reason?: string;
+// Breathing analysis types
+export interface BreathingBuffer {
+  values: number[];
+  timestamps: number[];
+  maxSize: number;
+}
+
+export interface MovementBuffer {
+  velocities: number[];
+  timestamps: number[];
+  maxSize: number;
 }
 
 export interface PoseLandmarks {
@@ -54,14 +51,12 @@ export interface PoseLandmarks {
   visibility: number;
 }
 
-export interface BreathingBuffer {
-  timestamps: number[];
-  values: number[];
-  maxSize: number;
-}
-
-export interface MovementBuffer {
-  timestamps: number[];
-  velocities: number[];
-  maxSize: number;
+export interface TrackedPerson {
+  id: string;
+  bbox: { x: number; y: number; w: number; h: number };
+  landmarks?: PoseLandmarks[];
+  lastSeen: number;
+  breathingBuffer: BreathingBuffer;
+  movementBuffer: MovementBuffer;
+  centroid: { x: number; y: number };
 }
