@@ -22,9 +22,11 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
   const rafRef = useRef<number | null>(null);
   const boxesRef = useRef<DetectedPerson[]>([]);
   const nextIdRef = useRef<number>(0);
+  const detectionCountRef = useRef<number>(0);
 
   const [isDetecting, setIsDetecting] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(true);
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Load TensorFlow.js model
@@ -49,129 +51,8 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
     }
   }, []);
 
-  // Detection loop
-  const detectFrame = useCallback(async () => {
-    if (!modelRef.current || !videoRef.current || !canvasRef.current) {
-      rafRef.current = requestAnimationFrame(detectFrame);
-      return;
-    }
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
 
-    if (!ctx || video.readyState < 2 || video.videoWidth === 0) {
-      rafRef.current = requestAnimationFrame(detectFrame);
-      return;
-    }
-
-    try {
-      // Run detection
-      const predictions = await modelRef.current.detect(video);
-      
-      // Filter for persons with score > 0.4
-      const personDetections = predictions.filter(
-        pred => pred.class === 'person' && pred.score > 0.4
-      );
-
-      // Convert to normalized coordinates and create DetectedPerson objects
-      const detectedPersons: DetectedPerson[] = personDetections.map((pred, index) => {
-        const [x, y, width, height] = pred.bbox;
-        const normalizedBbox = {
-          x: x / video.videoWidth,
-          y: y / video.videoHeight,
-          w: width / video.videoWidth,
-          h: height / video.videoHeight
-        };
-
-        // Chest ROI is upper third of the bounding box
-        const chestROI = {
-          x: normalizedBbox.x,
-          y: normalizedBbox.y,
-          w: normalizedBbox.w,
-          h: normalizedBbox.h / 3
-        };
-
-        return {
-          id: `person_${nextIdRef.current + index}`,
-          bbox: normalizedBbox,
-          chestROI,
-          score: pred.score
-        };
-      });
-
-      // Update next ID
-      nextIdRef.current += personDetections.length;
-
-      // Store for drawing
-      boxesRef.current = detectedPersons;
-
-      // Callback
-      if (onPersonsDetected) {
-        onPersonsDetected(detectedPersons, video);
-      }
-
-      // Draw on canvas
-      drawBoxes(ctx, detectedPersons, video.videoWidth, video.videoHeight);
-
-    } catch (err) {
-      console.error('❌ Detection error:', err);
-    }
-
-    rafRef.current = requestAnimationFrame(detectFrame);
-  }, [onPersonsDetected]);
-
-  // Draw bounding boxes and labels
-  const drawBoxes = useCallback((
-    ctx: CanvasRenderingContext2D,
-    persons: DetectedPerson[],
-    videoWidth: number,
-    videoHeight: number
-  ) => {
-    // Clear canvas
-    ctx.clearRect(0, 0, videoWidth, videoHeight);
-
-    persons.forEach(person => {
-      // Convert normalized coordinates to pixel coordinates
-      const x = person.bbox.x * videoWidth;
-      const y = person.bbox.y * videoHeight;
-      const w = person.bbox.w * videoWidth;
-      const h = person.bbox.h * videoHeight;
-
-      // Draw bounding box
-      ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x, y, w, h);
-
-      // Draw chest ROI
-      const chestX = person.chestROI.x * videoWidth;
-      const chestY = person.chestROI.y * videoHeight;
-      const chestW = person.chestROI.w * videoWidth;
-      const chestH = person.chestROI.h * videoHeight;
-
-      ctx.strokeStyle = '#ff0000';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.strokeRect(chestX, chestY, chestW, chestH);
-      ctx.setLineDash([]);
-
-      // Draw label background
-      const labelY = y - 5;
-      const labelHeight = 20;
-      ctx.fillStyle = '#00ff00';
-      ctx.fillRect(x, labelY - labelHeight, w, labelHeight);
-
-      // Draw label text
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 12px Arial';
-      ctx.textAlign = 'left';
-      ctx.fillText(
-        `Person ${person.id} (${(person.score * 100).toFixed(0)}%)`,
-        x + 5,
-        labelY - 8
-      );
-    });
-  }, []);
 
   // Handle video file upload
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,23 +70,121 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
     videoRef.current.load();
 
     console.log('📹 Video file loaded:', file.name);
+    
+    // Reset video loaded state
+    setIsVideoLoaded(false);
+    
+    // Add event listeners to track video loading
+    const video = videoRef.current;
+    
+    const handleLoadedMetadata = () => {
+      console.log('📹 Video metadata loaded:', {
+        width: video.videoWidth,
+        height: video.videoHeight,
+        duration: video.duration
+      });
+      setIsVideoLoaded(true);
+      console.log('✅ Video loaded state set to true');
+    };
+    
+    const handleCanPlay = () => {
+      console.log('📹 Video can play');
+    };
+    
+    // Remove any existing listeners first
+    video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    video.removeEventListener('canplay', handleCanPlay);
+    
+    // Add new listeners
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
+    
+    // Also try to set loaded state after a short delay as backup
+    setTimeout(() => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        console.log('📹 Backup: Video dimensions detected, setting loaded state');
+        setIsVideoLoaded(true);
+      }
+    }, 1000);
   }, []);
 
   // Start/stop detection
-  const startDetection = useCallback(() => {
+  const startDetection = useCallback(async () => {
     if (!modelRef.current) {
       console.log('⚠️ Model not loaded yet');
       return;
     }
 
-    if (!videoRef.current?.src) {
+    if (!isVideoLoaded) {
       console.log('⚠️ No video loaded yet');
+      return;
+    }
+
+    // Start video playback
+    console.log('▶️ Starting video playback...');
+    try {
+      await videoRef.current.play();
+      console.log('✅ Video playback started');
+    } catch (err) {
+      console.error('❌ Error playing video:', err);
+      setError(`Failed to play video: ${err}`);
       return;
     }
 
     setIsDetecting(true);
     console.log('🎯 Starting person detection...');
-  }, []);
+    
+    // Force canvas to be visible and sized
+    if (canvasRef.current && videoRef.current) {
+      canvasRef.current.style.display = 'block';
+      canvasRef.current.width = videoRef.current.videoWidth;
+      canvasRef.current.height = videoRef.current.videoHeight;
+      console.log('🎨 Canvas made visible and sized');
+    }
+
+    // Start detection loop
+    const runDetection = async () => {
+      if (!modelRef.current || !videoRef.current || !canvasRef.current) return;
+      
+      try {
+        const predictions = await modelRef.current.detect(videoRef.current);
+        console.log('🔍 Detection results:', predictions);
+        
+        // Draw results on canvas
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          
+          // Draw person detections
+          predictions.forEach((pred, i) => {
+            if (pred.class === 'person' && pred.score > 0.4) {
+              const [x, y, w, h] = pred.bbox;
+              ctx.strokeStyle = '#00ff00';
+              ctx.lineWidth = 3;
+              ctx.strokeRect(x, y, w, h);
+              
+              // Draw label
+              ctx.fillStyle = '#00ff00';
+              ctx.fillRect(x, y - 25, 150, 25);
+              ctx.fillStyle = '#000000';
+              ctx.font = 'bold 14px Arial';
+              ctx.fillText(`Person ${i+1} (${(pred.score*100).toFixed(0)}%)`, x + 5, y - 8);
+            }
+          });
+        }
+      } catch (err) {
+        console.error('❌ Detection error:', err);
+      }
+    };
+
+    // Run detection continuously
+    const detectionLoop = () => {
+      runDetection();
+      rafRef.current = requestAnimationFrame(detectionLoop);
+    };
+    
+    detectionLoop();
+  }, [isVideoLoaded, isDetecting]);
 
   const stopDetection = useCallback(() => {
     setIsDetecting(false);
@@ -216,21 +195,6 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
     console.log('⏹️ Stopped person detection');
   }, []);
 
-  // Start detection loop when enabled
-  useEffect(() => {
-    if (isDetecting && modelRef.current) {
-      rafRef.current = requestAnimationFrame(detectFrame);
-    } else if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-
-    return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
-    };
-  }, [isDetecting, detectFrame]);
 
   // Set canvas size to match video
   useEffect(() => {
@@ -282,11 +246,19 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
           controls
           muted
           playsInline
+          autoPlay={false}
+          loop={false}
         />
         <canvas
           ref={canvasRef}
           className="overlay-canvas"
-          style={{ display: isDetecting ? 'block' : 'none' }}
+          style={{ 
+            display: isDetecting ? 'block' : 'none',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            zIndex: 10
+          }}
         />
       </div>
 
@@ -300,11 +272,11 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
         
         <button
           onClick={startDetection}
-          disabled={isModelLoading || isDetecting || !videoRef.current?.src}
+          disabled={isModelLoading || isDetecting || !isVideoLoaded}
           className="control-btn start"
         >
           {isModelLoading ? '⏳ Loading Model...' : 
-           !videoRef.current?.src ? '📹 Upload Video First' :
+           !isVideoLoaded ? '📹 Upload Video First' :
            isDetecting ? '🎯 Detecting...' : '▶️ Start Detection'}
         </button>
 
@@ -330,7 +302,7 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
         <br />
         Persons: {boxesRef.current.length}
         <br />
-        Video: {videoRef.current?.src ? '📹 Loaded' : '❌ No Video'}
+        Video: {isVideoLoaded ? '📹 Loaded' : '❌ No Video'}
       </div>
     </div>
   );
