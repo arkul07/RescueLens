@@ -1,0 +1,414 @@
+/* App.css */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #1a1a1a;
+  color: white;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: #2a2a2a;
+  border-bottom: 2px solid #444;
+}
+
+.app-header h1 {
+  color: #00ff88;
+  margin: 0;
+  font-size: 24px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: #333;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.connected {
+  background: #00ff88;
+}
+
+.status-dot.disconnected {
+  background: #ff4444;
+}
+
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.video-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.video-container {
+  position: relative;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.video-feed {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.control-btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-btn.start {
+  background: #00ff88;
+  color: #000;
+}
+
+.control-btn.stop {
+  background: #ff4444;
+  color: white;
+}
+
+.control-btn.export {
+  background: #666;
+  color: white;
+}
+
+.control-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.sidebar {
+  width: 400px;
+  background: #2a2a2a;
+  padding: 20px;
+  overflow-y: auto;
+  border-left: 1px solid #444;
+}
+
+.patients-panel h3,
+.override-panel h3,
+.event-log h3 {
+  color: #00ff88;
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  border-bottom: 1px solid #555;
+  padding-bottom: 8px;
+}
+
+.no-patients {
+  color: #666;
+  text-align: center;
+  padding: 20px;
+}
+
+.patients-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.patient-card {
+  background: #333;
+  border-radius: 6px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.patient-card:hover {
+  background: #444;
+}
+
+.patient-card.selected {
+  border-color: #00ff88;
+  background: #444;
+}
+
+.patient-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.patient-id {
+  font-weight: bold;
+  color: #00ff88;
+}
+
+.triage-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.triage-badge.RED {
+  background: #ff0000;
+  color: white;
+}
+
+.triage-badge.YELLOW {
+  background: #ffff00;
+  color: black;
+}
+
+.triage-badge.GREEN {
+  background: #00ff00;
+  color: black;
+}
+
+.triage-badge.BLACK {
+  background: #000000;
+  color: white;
+}
+
+.triage-badge.UNKNOWN {
+  background: #808080;
+  color: white;
+}
+
+.patient-details {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.detail-row span:first-child {
+  color: #ccc;
+}
+
+.reason-text {
+  font-size: 11px;
+  color: #999;
+  max-width: 150px;
+  word-wrap: break-word;
+}
+
+.override-panel {
+  background: #333;
+  border-radius: 6px;
+  padding: 15px;
+  margin: 20px 0;
+}
+
+.override-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-group label {
+  font-size: 12px;
+  color: #ccc;
+  font-weight: bold;
+}
+
+.form-group select,
+.form-group input {
+  padding: 8px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #444;
+  color: white;
+  font-size: 14px;
+}
+
+.form-group select:focus,
+.form-group input:focus {
+  outline: none;
+  border-color: #00ff88;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.override-btn {
+  flex: 1;
+  padding: 10px;
+  background: #00ff88;
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.override-btn:hover {
+  background: #00cc6a;
+}
+
+.cancel-btn {
+  flex: 1;
+  padding: 10px;
+  background: #666;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-btn:hover {
+  background: #777;
+}
+
+.event-log {
+  background: #333;
+  border-radius: 6px;
+  padding: 15px;
+}
+
+.log-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.log-entry {
+  background: #444;
+  border-radius: 4px;
+  padding: 10px;
+  font-size: 12px;
+  border-left: 3px solid #666;
+}
+
+.log-entry.ai {
+  border-left-color: #00ff88;
+}
+
+.log-entry.override {
+  border-left-color: #ffaa00;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.log-time {
+  color: #999;
+  font-size: 11px;
+}
+
+.log-category {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.log-category.RED {
+  background: #ff0000;
+  color: white;
+}
+
+.log-category.YELLOW {
+  background: #ffff00;
+  color: black;
+}
+
+.log-category.GREEN {
+  background: #00ff00;
+  color: black;
+}
+
+.log-category.BLACK {
+  background: #000000;
+  color: white;
+}
+
+.log-category.UNKNOWN {
+  background: #808080;
+  color: white;
+}
+
+.log-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #ccc;
+}
+
+/* Responsive design */
+@media (max-width: 1200px) {
+  .main-content {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    max-height: 300px;
+  }
+}

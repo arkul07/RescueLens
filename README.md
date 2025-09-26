@@ -1,46 +1,47 @@
 # 🚑 RescueLens - AI-Assisted Triage System
 
-**Disaster Response & Low-Resource Medical Triage**
+**Disaster Response & Low-Resource Medical Triage MVP**
 
-RescueLens is an advanced AI-powered medical triage system designed for disaster response scenarios and low-resource medical environments. It combines computer vision, audio processing, and machine learning to provide real-time patient assessment and triage decisions.
+RescueLens is a lightweight, browser-based AI-powered medical triage system designed for disaster response scenarios and low-resource medical environments. It uses browser-side computer vision with MediaPipe Pose detection and real-time WebSocket communication to provide instant patient assessment and triage decisions.
 
 ## 🌟 Features
 
-### 🎥 Real-Time Video Analysis
-- **Live Camera Feed**: Continuous monitoring of patients via webcam
-- **Breathing Pattern Detection**: Advanced computer vision algorithms to detect breathing patterns
-- **Patient Detection**: Automatic identification and tracking of multiple patients
-- **Visual Overlays**: Real-time triage status indicators with color-coded patient boxes
+### 🎥 Browser-Side Video Analysis
+- **MediaPipe Pose Detection**: Lightweight, real-time pose detection in the browser
+- **Breathing Pattern Analysis**: Sliding window FFT-based respiratory rate estimation
+- **Movement Classification**: Purposeful vs. low vs. none movement detection
+- **Multi-Patient Tracking**: Simultaneous detection and tracking of multiple patients
+- **Visual Overlays**: Real-time triage status with color-coded patient boxes
 
-### 🎤 Audio Processing
-- **Distress Detection**: Audio analysis to identify cries for help or medical distress
-- **Background Noise Filtering**: Advanced audio processing to isolate important sounds
-- **Real-Time Audio Visualization**: Live audio waveform display
+### 🎤 Audio Processing (Optional)
+- **Web Audio API**: Real-time microphone analysis for breathing detection
+- **Keyword Detection**: Simple keyword recognition for distress calls
+- **Audio Quality Assessment**: SNR-based audio signal quality evaluation
 
-### 🧠 AI-Powered Triage
-- **Automated Triage Decisions**: RED, YELLOW, GREEN, BLACK classification system
-- **Confidence Scoring**: AI confidence levels for each triage decision
-- **Multi-Patient Support**: Simultaneous monitoring of multiple patients
-- **Real-Time Updates**: Live triage status updates via WebSocket
+### 🧠 START-Like Triage Rules
+- **Automated Triage Decisions**: RED, YELLOW, GREEN, BLACK, UNKNOWN classification
+- **Confidence Scoring**: Multi-factor confidence calculation
+- **Human Override Support**: Manual override capability with reason tracking
+- **Real-Time Updates**: Live triage status via WebSocket
 
 ### 📊 Data Management
-- **Export Functionality**: Export triage logs in CSV and JSON formats
-- **Event Logging**: Comprehensive logging of all detection and triage events
-- **Historical Data**: Track patient status changes over time
+- **Event Logging**: Comprehensive logging of AI decisions and human overrides
+- **Export Functionality**: JSON and CSV export of triage logs
+- **Privacy-First**: No raw video/audio data sent to backend
 
 ## 🏗️ Architecture
 
-### Backend (FastAPI)
-- **Real-time Processing**: High-performance video and audio processing
-- **WebSocket Communication**: Live data streaming to frontend
-- **RESTful API**: Standard API endpoints for system control
-- **Modular Design**: Separate modules for perception, triage, and audio processing
-
-### Frontend (React)
+### Frontend (React + Vite + TypeScript)
+- **Browser-Side Processing**: MediaPipe Pose detection runs locally
+- **Real-Time Analysis**: Sliding window breathing and movement analysis
+- **WebSocket Communication**: Live data streaming to backend
 - **Modern UI**: Clean, responsive interface optimized for medical environments
-- **Real-time Updates**: Live video feed with patient overlays
-- **Control Panel**: Easy-to-use controls for camera, audio, and analysis
-- **Status Monitoring**: Real-time system status and patient information
+
+### Backend (FastAPI)
+- **WebSocket Endpoint**: Real-time patient state processing
+- **START Triage Rules**: Medical triage decision engine
+- **Event Logging**: In-memory event storage with export capabilities
+- **Human Override API**: RESTful override submission
 
 ## 🚀 Quick Start
 
@@ -48,7 +49,7 @@ RescueLens is an advanced AI-powered medical triage system designed for disaster
 - Python 3.8+
 - Node.js 16+
 - Webcam access
-- Microphone access
+- Modern browser with WebRTC support
 
 ### Installation
 
@@ -58,13 +59,15 @@ RescueLens is an advanced AI-powered medical triage system designed for disaster
    cd RescueLens
    ```
 
-2. **Install Python dependencies**
+2. **Install Backend Dependencies**
    ```bash
+   cd backend
    pip install -r requirements.txt
    ```
 
-3. **Install Node.js dependencies**
+3. **Install Frontend Dependencies**
    ```bash
+   cd ../frontend
    npm install
    ```
 
@@ -72,20 +75,29 @@ RescueLens is an advanced AI-powered medical triage system designed for disaster
 
 1. **Start the FastAPI backend**
    ```bash
-   python fastapi_backend.py
+   cd backend
+   python server.py
    ```
-   The backend will be available at `http://localhost:8001`
+   The backend will be available at `http://localhost:8000`
 
 2. **Start the React frontend**
    ```bash
-   npm start
+   cd frontend
+   npm run dev
    ```
    The frontend will be available at `http://localhost:3000`
 
 3. **Access the application**
    - Open your browser to `http://localhost:3000`
    - Grant camera and microphone permissions when prompted
-   - Click "Start Camera" to begin live analysis
+   - Click "Start Detection" to begin live analysis
+
+### Optional: Run Simulation
+```bash
+cd scripts
+pip install -r requirements.txt
+python simulation.py
+```
 
 ## 📖 Usage
 
@@ -122,22 +134,28 @@ RescueLens is an advanced AI-powered medical triage system designed for disaster
 
 ```
 RescueLens/
-├── fastapi_backend.py      # Main FastAPI backend server
-├── perception.py           # Computer vision and patient detection
-├── triage.py              # Triage decision algorithms
-├── audio.py               # Audio processing and analysis
-├── utils.py               # Utility functions
-├── requirements.txt       # Python dependencies
-├── src/                   # React frontend
-│   ├── App.js            # Main React application
-│   ├── components/       # React components
-│   │   ├── VideoFeed.js  # Video display component
-│   │   ├── ControlsPanel.js # System controls
-│   │   ├── StatusPanel.js   # Status display
-│   │   └── AudioVisualizer.js # Audio visualization
-│   └── index.js          # React entry point
-├── public/               # Static assets
-└── README.md            # This file
+├── backend/                    # FastAPI backend
+│   ├── server.py              # Main FastAPI server
+│   ├── models.py              # Pydantic data models
+│   ├── triage.py              # START triage rules
+│   ├── store.py               # Event log storage
+│   └── requirements.txt      # Python dependencies
+├── frontend/                   # React + Vite frontend
+│   ├── src/
+│   │   ├── App.tsx            # Main React application
+│   │   ├── types.ts           # TypeScript interfaces
+│   │   ├── hooks/             # Custom React hooks
+│   │   │   ├── useMedia.ts    # Camera/microphone access
+│   │   │   ├── usePerception.ts # MediaPipe pose detection
+│   │   │   └── useWebSocket.ts # WebSocket communication
+│   │   └── utils/
+│   │       └── draw.ts        # Canvas overlay utilities
+│   ├── package.json           # Node.js dependencies
+│   └── vite.config.js         # Vite configuration
+├── scripts/                    # Optional simulation
+│   ├── simulation.py          # Synthetic patient generator
+│   └── requirements.txt       # Simulation dependencies
+└── README.md                  # This file
 ```
 
 ## 🔧 Configuration
