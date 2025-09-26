@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import CameraAnalysis from './components/CameraAnalysis';
 import VideoUploadAnalysis from './components/VideoUploadAnalysis';
+import VideoDetect from './components/VideoDetect';
 import './App.css';
 
-type AppMode = 'live' | 'upload' | 'synthetic';
+type AppMode = 'live' | 'upload' | 'synthetic' | 'detect';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>('live');
@@ -26,12 +27,18 @@ const App: React.FC = () => {
           >
             📁 Upload Video
           </button>
-          <button 
-            className={`mode-btn ${mode === 'synthetic' ? 'active' : ''}`}
-            onClick={() => setMode('synthetic')}
-          >
-            🧪 Synthetic Data
-          </button>
+                  <button 
+                    className={`mode-btn ${mode === 'synthetic' ? 'active' : ''}`}
+                    onClick={() => setMode('synthetic')}
+                  >
+                    🧪 Synthetic Data
+                  </button>
+                  <button 
+                    className={`mode-btn ${mode === 'detect' ? 'active' : ''}`}
+                    onClick={() => setMode('detect')}
+                  >
+                    🎯 Video Detect
+                  </button>
         </div>
       </header>
 
@@ -40,24 +47,34 @@ const App: React.FC = () => {
         
         {mode === 'upload' && <VideoUploadAnalysis />}
         
-        {mode === 'synthetic' && (
-          <div className="synthetic-container">
-            <div className="synthetic-area">
-              <div className="synthetic-icon">🧪</div>
-              <div className="synthetic-text">Synthetic Data Mode</div>
-              <div className="synthetic-subtext">Generating test patient data for analysis</div>
-              <button 
-                className="control-btn start"
-                onClick={() => {
-                  // TODO: Start synthetic data generation
-                  console.log('Starting synthetic data generation...');
-                }}
-              >
-                ▶️ Start Synthetic Data
-              </button>
-            </div>
-          </div>
-        )}
+                {mode === 'synthetic' && (
+                  <div className="synthetic-container">
+                    <div className="synthetic-area">
+                      <div className="synthetic-icon">🧪</div>
+                      <div className="synthetic-text">Synthetic Data Mode</div>
+                      <div className="synthetic-subtext">Generating test patient data for analysis</div>
+                      <button 
+                        className="control-btn start"
+                        onClick={() => {
+                          // TODO: Start synthetic data generation
+                          console.log('Starting synthetic data generation...');
+                        }}
+                      >
+                        ▶️ Start Synthetic Data
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {mode === 'detect' && (
+                  <VideoDetect 
+                    onPersonsDetected={(persons, video) => {
+                      console.log(`🎯 Detected ${persons.length} persons:`, persons);
+                      // You can process the detected persons here
+                      // Each person has: id, bbox (normalized), chestROI (normalized), score
+                    }}
+                  />
+                )}
       </div>
     </div>
   );
