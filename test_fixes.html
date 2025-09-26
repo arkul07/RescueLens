@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RescueLens Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #444;
+            border-radius: 8px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background: #00ff88; color: black; }
+        .error { background: #ff4444; color: white; }
+        .info { background: #4a90e2; color: white; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #4a90e2;
+            color: white;
+        }
+        button:hover { background: #357abd; }
+    </style>
+</head>
+<body>
+    <h1>🚑 RescueLens System Test</h1>
+    
+    <div class="test-section">
+        <h2>Backend Status</h2>
+        <div id="backend-status" class="status info">Testing...</div>
+        <button onclick="testBackend()">Test Backend</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Frontend Status</h2>
+        <div id="frontend-status" class="status info">Testing...</div>
+        <button onclick="testFrontend()">Test Frontend</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>WebSocket Test</h2>
+        <div id="websocket-status" class="status info">Not tested</div>
+        <button onclick="testWebSocket()">Test WebSocket</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Quick Links</h2>
+        <p><a href="http://localhost:3000" target="_blank" style="color: #00ff88;">Open RescueLens App</a></p>
+        <p><a href="http://localhost:8000/status" target="_blank" style="color: #00ff88;">Backend Status API</a></p>
+        <p><a href="http://localhost:8000/health" target="_blank" style="color: #00ff88;">Backend Health Check</a></p>
+    </div>
+
+    <script>
+        async function testBackend() {
+            const statusEl = document.getElementById('backend-status');
+            try {
+                const response = await fetch('http://localhost:8000/health', {
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                const data = await response.json();
+                statusEl.textContent = `✅ Backend healthy: ${JSON.stringify(data)}`;
+                statusEl.className = 'status success';
+            } catch (error) {
+                statusEl.textContent = `❌ Backend error: ${error.message}`;
+                statusEl.className = 'status error';
+            }
+        }
+        
+        async function testFrontend() {
+            const statusEl = document.getElementById('frontend-status');
+            try {
+                const response = await fetch('http://localhost:3000', {
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                if (response.ok) {
+                    statusEl.textContent = '✅ Frontend accessible';
+                    statusEl.className = 'status success';
+                } else {
+                    statusEl.textContent = `❌ Frontend error: ${response.status}`;
+                    statusEl.className = 'status error';
+                }
+            } catch (error) {
+                statusEl.textContent = `❌ Frontend error: ${error.message}`;
+                statusEl.className = 'status error';
+            }
+        }
+        
+        function testWebSocket() {
+            const statusEl = document.getElementById('websocket-status');
+            statusEl.textContent = 'Testing WebSocket connection...';
+            statusEl.className = 'status info';
+            
+            const ws = new WebSocket('ws://localhost:8000/ws');
+            
+            ws.onopen = () => {
+                statusEl.textContent = '✅ WebSocket connected successfully';
+                statusEl.className = 'status success';
+                ws.close();
+            };
+            
+            ws.onerror = (error) => {
+                statusEl.textContent = `❌ WebSocket error: ${error}`;
+                statusEl.className = 'status error';
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket test completed');
+            };
+        }
+        
+        // Auto-test on load
+        window.onload = () => {
+            testBackend();
+            testFrontend();
+        };
+    </script>
+</body>
+</html>

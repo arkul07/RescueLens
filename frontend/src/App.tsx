@@ -6,31 +6,41 @@ import { drawAllOverlays, DrawContext } from './utils/draw';
 import { PatientState, TriageDecision, OverrideRequest } from './types';
 import './App.css';
 
+type AppMode = 'live' | 'upload' | 'synthetic';
+
 const App: React.FC = () => {
+  const [mode, setMode] = useState<AppMode>('live');
   const [isDetecting, setIsDetecting] = useState(false);
   const [fps, setFps] = useState(0);
-  const [status, setStatus] = useState('Initializing...');
+  const [status, setStatus] = useState('Select a mode to begin...');
   const [eventLog, setEventLog] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<string | null>(null);
   const [overrideCategory, setOverrideCategory] = useState<string>('UNKNOWN');
   const [overrideReason, setOverrideReason] = useState('');
 
+  // Refs for stable DOM elements - never remount these
+  const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fpsRef = useRef<number[]>([]);
   const lastFrameTimeRef = useRef<number>(0);
+  const animationIdRef = useRef<number | null>(null);
+  const isInitializedRef = useRef<boolean>(false);
+  const lastStateUpdateRef = useRef<number>(0);
 
   // Custom hooks
-  const { videoStream, videoRef, initializeMedia, stopMedia, getAudioData } = useMedia();
+  const { videoStream, initializeMedia, stopMedia, getAudioData } = useMedia();
   const { patients, isProcessing, error: perceptionError, startDetection, stopDetection } = usePerception(videoRef.current);
-  const { connected, triageDecisions, sendPatientState, sendOverride, exportLogs, error: wsError } = useWebSocket();
+  const { connected, triageDecisions, sendPatientState, sendOverride, exportLogs, error: wsError, connect: reconnectWs } = useWebSocket();
 
-  // Initialize media and detection
+  // Don't auto-initialize media - let user control it manually
+
+  // Set video stream ONCE when available
   useEffect(() => {
-    const init = async () => {
-      await initializeMedia();
-    };
-    init();
-  }, [initializeMedia]);
+    if (videoStream && videoRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = videoStream;
+      videoRef.current.play().catch(console.error);
+    }
+  }, [videoStream]);
 
   // Start/stop detection based on media state
   useEffect(() => {
@@ -43,11 +53,66 @@ const App: React.FC = () => {
     }
   }, [videoStream, isDetecting, startDetection, stopDetection]);
 
-  // Send patient states to backend
+  // Handle manual start/stop
+  const handleToggleDetection = useCallback(() => {
+    if (isDetecting) {
+      stopDetection();
+      setIsDetecting(false);
+    } else {
+      startDetection();
+      setIsDetecting(true);
+    }
+  }, [isDetecting, startDetection, stopDetection]);
+
+  // Handle camera start
+  const handleStartCamera = useCallback(async () => {
+    console.log('📹 Starting camera...');
+    try {
+      await initializeMedia();
+    } catch (error) {
+      console.error('Failed to start camera:', error);
+    }
+  }, [initializeMedia]);
+
+  // Handle camera stop
+  const handleStopCamera = useCallback(() => {
+    console.log('🛑 Stopping camera and detection...');
+    stopMedia();
+    stopDetection();
+    setIsDetecting(false);
+  }, [stopMedia, stopDetection]);
+
+  // Throttled state updates - only update React state at 3-4Hz
+  const updateThrottledState = useCallback(() => {
+    const now = Date.now();
+    if (now - lastStateUpdateRef.current < 250) { // 4Hz max
+      return;
+    }
+    lastStateUpdateRef.current = now;
+
+    // Update FPS
+    if (lastFrameTimeRef.current > 0) {
+      const delta = now - lastFrameTimeRef.current;
+      if (delta > 0) {
+        const currentFps = 1000 / delta;
+        const cappedFps = Math.min(Math.max(currentFps, 0), 120);
+        
+        fpsRef.current.push(cappedFps);
+        if (fpsRef.current.length > 30) {
+          fpsRef.current = fpsRef.current.slice(-30);
+        }
+        
+        const avgFps = fpsRef.current.reduce((sum, f) => sum + f, 0) / fpsRef.current.length;
+        setFps(Math.round(avgFps * 10) / 10);
+      }
+    }
+    lastFrameTimeRef.current = now;
+  }, []);
+
+  // Send patient states to backend - throttled
   useEffect(() => {
     if (patients.length > 0 && connected) {
       patients.forEach(patient => {
-        // Add audio data if available
         const audioData = getAudioData();
         const patientWithAudio: PatientState = {
           ...patient,
@@ -61,32 +126,7 @@ const App: React.FC = () => {
     }
   }, [patients, connected, sendPatientState, getAudioData]);
 
-  // Update FPS
-  useEffect(() => {
-    const updateFPS = () => {
-      const now = performance.now();
-      if (lastFrameTimeRef.current > 0) {
-        const delta = now - lastFrameTimeRef.current;
-        const currentFps = 1000 / delta;
-        
-        fpsRef.current.push(currentFps);
-        if (fpsRef.current.length > 30) {
-          fpsRef.current = fpsRef.current.slice(-30);
-        }
-        
-        const avgFps = fpsRef.current.reduce((sum, f) => sum + f, 0) / fpsRef.current.length;
-        setFps(avgFps);
-      }
-      lastFrameTimeRef.current = now;
-      requestAnimationFrame(updateFPS);
-    };
-    
-    if (isDetecting) {
-      requestAnimationFrame(updateFPS);
-    }
-  }, [isDetecting]);
-
-  // Draw overlays on canvas
+  // Canvas overlay drawing with requestAnimationFrame - NO React state updates
   useEffect(() => {
     if (!canvasRef.current || !videoRef.current) return;
 
@@ -94,39 +134,78 @@ const App: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const drawContext: DrawContext = {
-      canvas,
-      ctx,
-      videoWidth: canvas.width,
-      videoHeight: canvas.height
-    };
-
     const draw = () => {
-      drawAllOverlays(drawContext, patients, triageDecisions, fps, status);
-      requestAnimationFrame(draw);
+      if (!isDetecting) {
+        animationIdRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Get latest data from refs (no state)
+      const latestPatients = patients;
+      const latestDecisions = triageDecisions;
+      const latestFps = fpsRef.current.length > 0 ? 
+        Math.round(fpsRef.current.reduce((sum, f) => sum + f, 0) / fpsRef.current.length * 10) / 10 : 0;
+
+      // Draw overlays
+      const drawContext: DrawContext = {
+        canvas,
+        ctx,
+        videoWidth: canvas.width,
+        videoHeight: canvas.height
+      };
+
+      drawAllOverlays(drawContext, latestPatients, latestDecisions, latestFps, status);
+
+      // Update throttled state
+      updateThrottledState();
+
+      // Continue animation loop
+      animationIdRef.current = requestAnimationFrame(draw);
     };
 
     if (isDetecting) {
-      draw();
+      animationIdRef.current = requestAnimationFrame(draw);
     }
-  }, [patients, triageDecisions, fps, status, isDetecting]);
 
-  // Update status
+    return () => {
+      if (animationIdRef.current) {
+        cancelAnimationFrame(animationIdRef.current);
+        animationIdRef.current = null;
+      }
+    };
+  }, [isDetecting, patients, triageDecisions, status, updateThrottledState]);
+
+  // Update status - throttled
   useEffect(() => {
-    if (perceptionError) {
-      setStatus(`Error: ${perceptionError}`);
-    } else if (wsError) {
-      setStatus(`WebSocket Error: ${wsError}`);
-    } else if (!connected) {
-      setStatus('Connecting to backend...');
-    } else if (!videoStream) {
-      setStatus('Requesting camera access...');
-    } else if (isProcessing) {
-      setStatus(`Detecting patients... (${patients.length} found)`);
-    } else {
-      setStatus('Ready');
-    }
-  }, [perceptionError, wsError, connected, videoStream, isProcessing, patients.length]);
+    const updateStatus = () => {
+      if (mode === 'live') {
+        if (perceptionError) {
+          setStatus(`Error: ${perceptionError}`);
+        } else if (wsError) {
+          setStatus(`WebSocket Error: ${wsError}`);
+        } else if (!connected) {
+          setStatus('Connecting to backend...');
+        } else if (!videoStream) {
+          setStatus('Click "Start Camera" to begin');
+        } else if (isProcessing) {
+          setStatus(`Detecting patients... (${patients.length} found)`);
+        } else {
+          setStatus('Camera ready - Click "Start Detection" to begin analysis');
+        }
+      } else if (mode === 'upload') {
+        setStatus('Upload video mode - Select a video file to analyze');
+      } else if (mode === 'synthetic') {
+        setStatus('Synthetic data mode - Generating test data');
+      }
+    };
+
+    // Throttle status updates
+    const timeoutId = setTimeout(updateStatus, 100);
+    return () => clearTimeout(timeoutId);
+  }, [mode, perceptionError, wsError, connected, videoStream, isProcessing, patients.length]);
 
   // Handle override submission
   const handleOverride = useCallback(async () => {
@@ -141,7 +220,6 @@ const App: React.FC = () => {
 
     await sendOverride(override);
     
-    // Add to event log
     setEventLog(prev => [{
       id: `override_${Date.now()}`,
       timestamp: Date.now(),
@@ -151,7 +229,7 @@ const App: React.FC = () => {
       confidence: 1.0,
       reason: overrideReason || 'Human override',
       override_reason: overrideReason
-    }, ...prev.slice(0, 99)]); // Keep last 100 entries
+    }, ...prev.slice(0, 99)]);
 
     setSelectedPatient(null);
     setOverrideReason('');
@@ -166,38 +244,145 @@ const App: React.FC = () => {
     <div className="app">
       <header className="app-header">
         <h1>🚑 RescueLens - AI-Assisted Triage</h1>
+        
+        <div className="mode-selector">
+          <button 
+            className={`mode-btn ${mode === 'live' ? 'active' : ''}`}
+            onClick={() => setMode('live')}
+          >
+            📹 Live Feed
+          </button>
+          <button 
+            className={`mode-btn ${mode === 'upload' ? 'active' : ''}`}
+            onClick={() => setMode('upload')}
+          >
+            📁 Upload Video
+          </button>
+          <button 
+            className={`mode-btn ${mode === 'synthetic' ? 'active' : ''}`}
+            onClick={() => setMode('synthetic')}
+          >
+            🧪 Synthetic Data
+          </button>
+        </div>
+        
         <div className="status-indicator">
           <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`}></span>
           {connected ? 'Connected' : 'Disconnected'}
+          {wsError && <span className="error-text"> - {wsError}</span>}
         </div>
       </header>
 
       <div className="main-content">
         <div className="video-panel">
-          <div className="video-container">
-            <video
-              ref={videoRef}
-              className="video-feed"
-              autoPlay
-              muted
-              playsInline
-            />
-            <canvas
-              ref={canvasRef}
-              className="overlay-canvas"
-              width={640}
-              height={360}
-            />
-          </div>
+          {mode === 'live' && (
+            <div className="video-container">
+              {!videoStream ? (
+                <div className="camera-placeholder">
+                  <div className="camera-icon">📹</div>
+                  <div className="camera-text">Camera Not Started</div>
+                  <div className="camera-subtext">Click "Start Camera" to begin</div>
+                </div>
+              ) : (
+                <>
+                  {/* Mount video ONCE - never remount */}
+                  <video
+                    ref={videoRef}
+                    className="video-feed"
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+                  {/* Mount canvas ONCE - never remount */}
+                  <canvas
+                    ref={canvasRef}
+                    className="overlay-canvas"
+                    width={640}
+                    height={360}
+                    style={{ display: isDetecting ? 'block' : 'none' }}
+                  />
+                </>
+              )}
+            </div>
+          )}
+          
+          {mode === 'upload' && (
+            <div className="upload-container">
+              <div className="upload-area">
+                <input
+                  type="file"
+                  id="video-upload"
+                  accept="video/*"
+                  style={{ display: 'none' }}
+                />
+                <label htmlFor="video-upload" className="upload-label">
+                  <div className="upload-icon">📁</div>
+                  <div className="upload-text">Click to upload video file</div>
+                  <div className="upload-subtext">Supports MP4, MOV, AVI formats</div>
+                </label>
+              </div>
+            </div>
+          )}
+          
+          {mode === 'synthetic' && (
+            <div className="synthetic-container">
+              <div className="synthetic-area">
+                <div className="synthetic-icon">🧪</div>
+                <div className="synthetic-text">Synthetic Data Mode</div>
+                <div className="synthetic-subtext">Generating test patient data for analysis</div>
+                <button 
+                  className="control-btn start"
+                  onClick={() => {
+                    setStatus('Generating synthetic patient data...');
+                  }}
+                >
+                  ▶️ Start Synthetic Data
+                </button>
+              </div>
+            </div>
+          )}
           
           <div className="controls">
-            <button
-              onClick={isDetecting ? stopDetection : startDetection}
-              className={`control-btn ${isDetecting ? 'stop' : 'start'}`}
-              disabled={!videoStream}
-            >
-              {isDetecting ? '⏹️ Stop Detection' : '▶️ Start Detection'}
-            </button>
+            {mode === 'live' && (
+              <>
+                {!videoStream ? (
+                  <button
+                    onClick={handleStartCamera}
+                    className="control-btn start"
+                  >
+                    📹 Start Camera
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleToggleDetection}
+                      className={`control-btn ${isDetecting ? 'stop' : 'start'}`}
+                    >
+                      {isDetecting ? '⏹️ Stop Detection' : '▶️ Start Detection'}
+                    </button>
+                    
+                    <button
+                      onClick={handleStopCamera}
+                      className="control-btn stop-camera"
+                    >
+                      📷 Stop Camera
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+            
+            {mode === 'upload' && (
+              <button
+                onClick={() => {
+                  setStatus('Processing uploaded video...');
+                }}
+                className="control-btn start"
+                disabled={true}
+              >
+                ▶️ Process Video
+              </button>
+            )}
             
             <button
               onClick={() => handleExport('json')}
@@ -213,6 +398,14 @@ const App: React.FC = () => {
               disabled={!connected}
             >
               📊 Export CSV
+            </button>
+            
+            <button
+              onClick={reconnectWs}
+              className="control-btn reconnect"
+              disabled={connected}
+            >
+              🔌 Reconnect WebSocket
             </button>
           </div>
         </div>
@@ -338,6 +531,17 @@ const App: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+          
+          <div className="debug-panel">
+            <h3>Debug Info</h3>
+            <div className="debug-info">
+              <div>WebSocket: {connected ? '✅ Connected' : '❌ Disconnected'}</div>
+              <div>Patients: {patients.length}</div>
+              <div>FPS: {fps.toFixed(1)}</div>
+              <div>Status: {status}</div>
+              {wsError && <div className="error">Error: {wsError}</div>}
             </div>
           </div>
         </div>

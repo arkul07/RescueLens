@@ -17,16 +17,46 @@ export const useWebSocket = () => {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isConnectingRef = useRef<boolean>(false);
+  const shouldReconnectRef = useRef<boolean>(true);
+  const lastConnectTimeRef = useRef<number>(0);
+  const isInitializedRef = useRef<boolean>(false);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    const now = Date.now();
+    
+    // Throttle connections - minimum 3 seconds between attempts
+    if (now - lastConnectTimeRef.current < 3000) {
+      console.log('🔌 WebSocket connection throttled, skipping...');
+      return;
+    }
+    
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
+      console.log('🔌 WebSocket already connected or connecting, skipping...');
+      return;
+    }
 
+    if (isConnectingRef.current) {
+      console.log('🔌 WebSocket connection already in progress, skipping...');
+      return;
+    }
+
+    if (!shouldReconnectRef.current) {
+      console.log('🔌 WebSocket reconnection disabled, skipping...');
+      return;
+    }
+
+    console.log('🔌 Creating new WebSocket connection...');
+    isConnectingRef.current = true;
+    lastConnectTimeRef.current = now;
+    
     try {
       const ws = new WebSocket('ws://localhost:8000/ws');
       wsRef.current = ws;
 
       ws.onopen = () => {
         console.log('🔗 WebSocket connected');
+        isConnectingRef.current = false;
         setWsState(prev => ({ ...prev, connected: true, error: null }));
         
         // Start heartbeat
@@ -55,8 +85,9 @@ export const useWebSocket = () => {
         }
       };
 
-      ws.onclose = () => {
-        console.log('🔌 WebSocket disconnected');
+      ws.onclose = (event) => {
+        console.log('🔌 WebSocket disconnected', event.code, event.reason);
+        isConnectingRef.current = false;
         setWsState(prev => ({ ...prev, connected: false }));
         
         // Clear heartbeat
@@ -65,24 +96,35 @@ export const useWebSocket = () => {
           heartbeatIntervalRef.current = null;
         }
 
-        // Attempt to reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 3000);
+        // Only reconnect if it wasn't a manual close (code 1000) and reconnection is enabled
+        if (event.code !== 1000 && shouldReconnectRef.current && !reconnectTimeoutRef.current) {
+          console.log('🔌 Scheduling reconnection in 5 seconds...');
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
+            connect();
+          }, 5000);
+        }
       };
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
+        isConnectingRef.current = false;
         setWsState(prev => ({ ...prev, error: 'WebSocket connection failed' }));
       };
 
     } catch (error) {
       console.error('Error creating WebSocket:', error);
+      isConnectingRef.current = false;
       setWsState(prev => ({ ...prev, error: `Failed to create WebSocket: ${error}` }));
     }
   }, []);
 
   const disconnect = useCallback(() => {
+    console.log('🔌 useWebSocket: Disconnecting...');
+    
+    // Disable reconnection
+    shouldReconnectRef.current = false;
+    
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
@@ -94,10 +136,12 @@ export const useWebSocket = () => {
     }
 
     if (wsRef.current) {
-      wsRef.current.close();
+      console.log('🔌 useWebSocket: Closing WebSocket...');
+      wsRef.current.close(1000, 'Manual disconnect');
       wsRef.current = null;
     }
     
+    isConnectingRef.current = false;
     setWsState(prev => ({ ...prev, connected: false }));
   }, []);
 
@@ -155,17 +199,32 @@ export const useWebSocket = () => {
     }
   }, []);
 
-  // Auto-connect on mount
+  // Initialize connection ONCE with delay
   useEffect(() => {
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+      shouldReconnectRef.current = true;
+      
+      // Add delay to prevent rapid connections
+      const connectTimeout = setTimeout(() => {
+        connect();
+      }, 1000);
+      
+      return () => {
+        clearTimeout(connectTimeout);
+        disconnect();
+      };
+    }
+  }, []); // Empty deps - only run once
+
+  const manualConnect = useCallback(() => {
+    shouldReconnectRef.current = true;
     connect();
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
+  }, [connect]);
 
   return {
     ...wsState,
-    connect,
+    connect: manualConnect,
     disconnect,
     sendPatientState,
     sendOverride,

@@ -18,12 +18,19 @@ export const useMedia = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const isInitializedRef = useRef<boolean>(false);
 
   const initializeMedia = async () => {
+    if (isInitializedRef.current) {
+      console.log('📹 Media already initialized, skipping...');
+      return;
+    }
+
+    isInitializedRef.current = true;
     setMediaState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      // Request camera and microphone access
+      // Request camera and microphone access ONCE
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 640 },
@@ -44,13 +51,13 @@ export const useMedia = () => {
       const videoStream = new MediaStream(videoTracks);
       const audioStream = new MediaStream(audioTracks);
 
-      // Set up video element
+      // Set up video element ONCE
       if (videoRef.current) {
         videoRef.current.srcObject = videoStream;
-        videoRef.current.play();
+        videoRef.current.play().catch(console.error);
       }
 
-      // Set up audio analysis
+      // Set up audio analysis ONCE
       if (audioTracks.length > 0) {
         audioContextRef.current = new AudioContext();
         const source = audioContextRef.current.createMediaStreamSource(audioStream);
@@ -92,6 +99,7 @@ export const useMedia = () => {
       error: null,
       loading: false
     });
+    isInitializedRef.current = false;
   };
 
   const getAudioData = (): { breathingPresent: boolean; snr: number } => {
