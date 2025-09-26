@@ -483,6 +483,59 @@
   background: #444;
 }
 
+.patient-card.out-of-frame {
+  opacity: 0.7;
+  border-style: dashed;
+  border-color: #666;
+}
+
+.out-of-frame-indicator {
+  background: #ff9900;
+  color: #1a1a1a;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+/* Playback Control Styles */
+.playback-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: #2a2a2a;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+
+.playback-control label {
+  color: #00ff88;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.playback-select {
+  padding: 6px 10px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #333;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.playback-select:focus {
+  outline: none;
+  border-color: #00ff88;
+}
+
+.playback-select:hover {
+  border-color: #666;
+}
+
 .patient-header {
   display: flex;
   justify-content: space-between;

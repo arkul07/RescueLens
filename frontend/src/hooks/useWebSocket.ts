@@ -43,7 +43,7 @@ export const useWebSocket = () => {
     isConnectingRef.current = true;
     
     try {
-      const ws = new WebSocket('ws://localhost:8000/ws');
+      const ws = new WebSocket('ws://localhost:8002/ws');
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -151,7 +151,7 @@ export const useWebSocket = () => {
 
   const sendOverride = useCallback(async (override: OverrideRequest) => {
     try {
-      const response = await fetch('http://localhost:8000/override', {
+      const response = await fetch('http://localhost:8002/override', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -173,7 +173,7 @@ export const useWebSocket = () => {
 
   const exportLogs = useCallback(async (format: 'json' | 'csv' = 'json') => {
     try {
-      const response = await fetch(`http://localhost:8000/export?format=${format}`);
+      const response = await fetch(`http://localhost:8002/export?format=${format}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

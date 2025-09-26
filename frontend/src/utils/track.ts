@@ -1,6 +1,6 @@
 // Simple IOU-based tracker for stable person IDs
 
-import { TrackedPerson } from '../types';
+import { TrackedPerson, PatientState } from '../types';
 
 /**
  * Calculate Intersection over Union (IoU) between two bounding boxes
@@ -37,8 +37,9 @@ export function calculateCentroid(bbox: { x: number; y: number; w: number; h: nu
  */
 export class PersonTracker {
   private trackedPersons: Map<string, TrackedPerson> = new Map();
+  private persistentPatients: Map<string, PatientState> = new Map(); // Persistent patient data
   private nextId = 1;
-  private maxAge = 5000; // 5 seconds
+  private maxAge = 30000; // 30 seconds - much longer persistence
   private iouThreshold = 0.3;
 
   /**
@@ -116,5 +117,59 @@ export class PersonTracker {
     const currentTime = Date.now();
     return Array.from(this.trackedPersons.values())
       .filter(person => currentTime - person.lastSeen <= this.maxAge);
+  }
+
+  /**
+   * Store persistent patient data
+   */
+  storePersistentPatient(patient: PatientState): void {
+    this.persistentPatients.set(patient.id, patient);
+  }
+
+  /**
+   * Get persistent patient data
+   */
+  getPersistentPatient(patientId: string): PatientState | undefined {
+    return this.persistentPatients.get(patientId);
+  }
+
+  /**
+   * Get all persistent patients (including those not currently in frame)
+   */
+  getAllPersistentPatients(): PatientState[] {
+    return Array.from(this.persistentPatients.values());
+  }
+
+  /**
+   * Update persistent patient data only if they're currently detected
+   */
+  updatePersistentPatientIfActive(patient: PatientState, isCurrentlyDetected: boolean): void {
+    if (isCurrentlyDetected) {
+      // Update with new data
+      this.persistentPatients.set(patient.id, patient);
+    } else {
+      // Keep existing data, just update timestamp to show they're still being tracked
+      const existing = this.persistentPatients.get(patient.id);
+      if (existing) {
+        this.persistentPatients.set(patient.id, {
+          ...existing,
+          ts: Date.now() // Update timestamp but keep old data
+        });
+      }
+    }
+  }
+
+  /**
+   * Clean up very old persistent patients (older than 5 minutes)
+   */
+  cleanupOldPersistentPatients(): void {
+    const currentTime = Date.now();
+    const maxPersistentAge = 300000; // 5 minutes
+    
+    for (const [id, patient] of this.persistentPatients) {
+      if (currentTime - patient.ts > maxPersistentAge) {
+        this.persistentPatients.delete(id);
+      }
+    }
   }
 }

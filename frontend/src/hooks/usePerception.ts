@@ -9,13 +9,15 @@ export interface PerceptionState {
   patients: PatientState[];
   isProcessing: boolean;
   error: string | null;
+  currentlyDetectedIds: Set<string>;
 }
 
 export const usePerception = (videoElement: HTMLVideoElement | null) => {
   const [perceptionState, setPerceptionState] = useState<PerceptionState>({
     patients: [],
     isProcessing: false,
-    error: null
+    error: null,
+    currentlyDetectedIds: new Set()
   });
 
   const poseRef = useRef<any>(null);
@@ -95,8 +97,8 @@ export const usePerception = (videoElement: HTMLVideoElement | null) => {
     // Update tracker
     const trackedPersons = trackerRef.current.update(detections);
     
-    // Convert to PatientState array
-    const patients: PatientState[] = trackedPersons.map(person => {
+    // Convert to PatientState array for currently detected patients
+    const currentPatients: PatientState[] = trackedPersons.map(person => {
       const breathingAnalysis = analyzeBreathing(person);
       const movementAnalysis = analyzeMovement(person);
       
@@ -116,14 +118,38 @@ export const usePerception = (videoElement: HTMLVideoElement | null) => {
       };
     });
 
+    // Update persistent patients
+    const currentlyDetectedIds = new Set(currentPatients.map(p => p.id));
+    
+    // Update data for currently detected patients
+    currentPatients.forEach(patient => {
+      trackerRef.current.updatePersistentPatientIfActive(patient, true);
+    });
+    
+    // Keep existing data for patients not currently detected
+    const allPersistentPatients = trackerRef.current.getAllPersistentPatients();
+    allPersistentPatients.forEach(persistentPatient => {
+      if (!currentlyDetectedIds.has(persistentPatient.id)) {
+        // Patient not currently detected - keep their existing data
+        trackerRef.current.updatePersistentPatientIfActive(persistentPatient, false);
+      }
+    });
+
+    // Clean up very old patients
+    trackerRef.current.cleanupOldPersistentPatients();
+
+    // Get all persistent patients (including those not in frame)
+    const allPatients = trackerRef.current.getAllPersistentPatients();
+
     // Update state (throttled)
     const now = Date.now();
     if (now - lastFrameTimeRef.current > 250) { // 4Hz max
       lastFrameTimeRef.current = now;
       setPerceptionState(prev => ({
         ...prev,
-        patients: patients,
-        isProcessing: patients.length > 0
+        patients: allPatients,
+        isProcessing: allPatients.length > 0,
+        currentlyDetectedIds: currentlyDetectedIds
       }));
     }
   }, []);

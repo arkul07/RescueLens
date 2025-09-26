@@ -11,7 +11,7 @@ export interface DrawContext {
 
 export const getTriageColor = (category: string): string => {
   switch (category) {
-    case 'RED': return '#ff0000';
+    case 'RED': return '#ff4444';
     case 'YELLOW': return '#ffff00';
     case 'GREEN': return '#00ff00';
     case 'BLACK': return '#000000';
@@ -23,7 +23,8 @@ export const getTriageColor = (category: string): string => {
 export const drawPatientOverlay = (
   context: DrawContext,
   patient: PatientState,
-  decision?: TriageDecision
+  decision?: TriageDecision,
+  isCurrentlyDetected: boolean = true
 ) => {
   const { ctx, videoWidth, videoHeight } = context;
 
@@ -36,36 +37,57 @@ export const drawPatientOverlay = (
   console.log(`🎯 Drawing overlay for ${patient.id}:`, {
     bbox: patient.bbox,
     pixelCoords: { x, y, w, h },
-    videoSize: { videoWidth, videoHeight }
+    videoSize: { videoWidth, videoHeight },
+    decision: decision,
+    isCurrentlyDetected: isCurrentlyDetected,
+    category: decision?.category,
+    color: color
   });
 
+  // Use the same logic as the text display
   const category = decision?.category || 'UNKNOWN';
   const color = getTriageColor(category);
   const confidence = decision?.confidence || 0;
 
-  // Draw bounding box
+  // Draw bounding box with enhanced visibility
   ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = isCurrentlyDetected ? 4 : 2; // Thinner line for out-of-frame patients
+  ctx.setLineDash(isCurrentlyDetected ? [] : [5, 5]); // Dashed line for out-of-frame patients
   ctx.strokeRect(x, y, w, h);
+  
+  // Add a subtle glow effect for better visibility
+  ctx.shadowColor = color;
+  ctx.shadowBlur = isCurrentlyDetected ? 8 : 4; // Less glow for out-of-frame patients
+  ctx.strokeRect(x, y, w, h);
+  ctx.shadowBlur = 0;
+  ctx.setLineDash([]); // Reset line dash
 
-  // Draw background for text
+  // Draw background for text with better contrast
   const textY = y - 5;
   const textHeight = 20;
   ctx.fillStyle = color;
   ctx.fillRect(x, textY - textHeight, w, textHeight);
 
-  // Draw patient ID and category
-  ctx.fillStyle = 'white';
-  ctx.font = 'bold 12px Arial';
+  // Draw patient ID and category with better contrast
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 14px Arial';
   ctx.textAlign = 'left';
-  ctx.fillText(
-    `${patient.id} - ${category}`,
-    x + 5,
-    textY - 8
-  );
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2;
+  
+  const statusText = isCurrentlyDetected ? `${patient.id} - ${category}` : `${patient.id} - ${category} (OUT OF FRAME)`;
+  ctx.strokeText(statusText, x + 5, textY - 8);
+  ctx.fillText(statusText, x + 5, textY - 8);
 
-  // Draw confidence
-  ctx.font = '10px Arial';
+  // Draw confidence with better visibility
+  ctx.font = 'bold 11px Arial';
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1;
+  ctx.strokeText(
+    `Conf: ${(confidence * 100).toFixed(0)}%`,
+    x + 5,
+    textY + 2
+  );
   ctx.fillText(
     `Conf: ${(confidence * 100).toFixed(0)}%`,
     x + 5,
@@ -74,12 +96,22 @@ export const drawPatientOverlay = (
 
   // Draw breathing rate if available
   if (patient.rr_bpm !== null && patient.rr_bpm !== undefined) {
+    ctx.strokeText(
+      `RR: ${patient.rr_bpm} bpm`,
+      x + w - 80,
+      textY - 8
+    );
     ctx.fillText(
       `RR: ${patient.rr_bpm} bpm`,
       x + w - 80,
       textY - 8
     );
   } else if (patient.breathing !== null) {
+    ctx.strokeText(
+      patient.breathing ? 'Breathing' : 'No Breathing',
+      x + w - 80,
+      textY - 8
+    );
     ctx.fillText(
       patient.breathing ? 'Breathing' : 'No Breathing',
       x + w - 80,
@@ -88,6 +120,11 @@ export const drawPatientOverlay = (
   }
 
   // Draw movement status
+  ctx.strokeText(
+    `Move: ${patient.movement}`,
+    x + w - 80,
+    textY + 2
+  );
   ctx.fillText(
     `Move: ${patient.movement}`,
     x + w - 80,
@@ -140,13 +177,15 @@ export const drawAllOverlays = (
   patients: PatientState[],
   decisions: Map<string, TriageDecision>,
   fps: number,
-  status: string
+  status: string,
+  currentlyDetectedIds?: Set<string>
 ) => {
   clearCanvas(context);
   
   patients.forEach(patient => {
     const decision = decisions.get(patient.id);
-    drawPatientOverlay(context, patient, decision);
+    const isCurrentlyDetected = currentlyDetectedIds ? currentlyDetectedIds.has(patient.id) : true;
+    drawPatientOverlay(context, patient, decision, isCurrentlyDetected);
   });
   
   drawFPS(context, fps);

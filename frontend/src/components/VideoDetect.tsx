@@ -56,6 +56,7 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playbackRate, setPlaybackRate] = useState(0.25);
   
   // Doctor override state
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
@@ -362,8 +363,10 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
     // Start video playback
     console.log('▶️ Starting video playback...');
     try {
+      // Set playback rate to 0.25x (quarter speed)
+      videoRef.current.playbackRate = playbackRate;
       await videoRef.current.play();
-      console.log('✅ Video playback started');
+      console.log(`✅ Video playback started at ${playbackRate}x speed`);
     } catch (err) {
       console.error('❌ Error playing video:', err);
       setError(`Failed to play video: ${err}`);
@@ -675,6 +678,30 @@ const VideoDetect: React.FC<VideoDetectProps> = ({ onPersonsDetected }) => {
         >
           ⏹️ Stop Detection
         </button>
+        
+        <div className="playback-control">
+          <label htmlFor="video-playback-rate">Playback Speed:</label>
+          <select
+            id="video-playback-rate"
+            value={playbackRate}
+            onChange={(e) => {
+              const newRate = parseFloat(e.target.value);
+              setPlaybackRate(newRate);
+              if (videoRef.current && !videoRef.current.paused) {
+                videoRef.current.playbackRate = newRate;
+              }
+            }}
+            className="playback-select"
+          >
+            <option value={0.25}>0.25x (Very Slow)</option>
+            <option value={0.5}>0.5x (Slow)</option>
+            <option value={0.75}>0.75x (Slightly Slow)</option>
+            <option value={1.0}>1.0x (Normal)</option>
+            <option value={1.25}>1.25x (Slightly Fast)</option>
+            <option value={1.5}>1.5x (Fast)</option>
+            <option value={2.0}>2.0x (Very Fast)</option>
+          </select>
+        </div>
       </div>
 
       {error && (

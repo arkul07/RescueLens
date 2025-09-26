@@ -21,6 +21,7 @@ const CameraAnalysis: React.FC = () => {
   const [status, setStatus] = useState('Initializing...');
   const [eventLog, setEventLog] = useState<any[]>([]);
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const [playbackRate, setPlaybackRate] = useState(0.5);
 
   // Refs for DOM elements
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,15 +35,80 @@ const CameraAnalysis: React.FC = () => {
 
   // Custom hooks
   const { videoStream, videoRef, initializeMedia, stopMedia, getAudioData } = useMedia();
-  const { patients, isProcessing, error: perceptionError, startDetection, stopDetection } = usePerception(videoElement);
+  const { patients, isProcessing, error: perceptionError, startDetection, stopDetection, currentlyDetectedIds } = usePerception(videoElement);
   
-  // Mock WebSocket state for now (commented out real WebSocket)
-  const connected = true; // Mock as connected
-  const triageDecisions = new Map(); // Empty map
-  const wsError = null; // No error
-  const sendPatientState = () => {}; // No-op
-  const sendOverride = () => {}; // No-op
-  const exportLogs = () => {}; // No-op
+  // WebSocket connection
+  const { connected, triageDecisions: wsTriageDecisions, error: wsError, sendPatientState, sendOverride, exportLogs } = useWebSocket();
+  
+  // Mock triage decisions for testing (when WebSocket is not connected)
+  const [mockTriageDecisions, setMockTriageDecisions] = useState<Map<string, TriageDecision>>(new Map());
+  
+  // Use WebSocket decisions if connected, otherwise use mock decisions
+  const triageDecisions = connected ? wsTriageDecisions : mockTriageDecisions;
+
+  // Generate mock triage decisions based on patient data
+  useEffect(() => {
+    if (!connected && patients.length > 0) {
+      console.log('🎭 Generating mock triage decisions...');
+      const newDecisions = new Map<string, TriageDecision>();
+      
+      patients.forEach(patient => {
+        // Simple triage logic based on breathing rate and movement
+        let category: 'RED' | 'YELLOW' | 'GREEN' | 'BLACK' | 'UNKNOWN' = 'UNKNOWN';
+        let reason = '';
+        let confidence = 0.8;
+
+        if (patient.rr_bpm !== null && patient.rr_bpm !== undefined) {
+          if (patient.rr_bpm > 30 || patient.rr_bpm < 8) {
+            category = 'RED';
+            reason = `Critical breathing rate: ${patient.rr_bpm} bpm`;
+            confidence = 0.9;
+          } else if (patient.rr_bpm > 25 || patient.rr_bpm < 12) {
+            category = 'YELLOW';
+            reason = `Abnormal breathing rate: ${patient.rr_bpm} bpm`;
+            confidence = 0.8;
+          } else {
+            category = 'GREEN';
+            reason = `Normal breathing rate: ${patient.rr_bpm} bpm`;
+            confidence = 0.7;
+          }
+        } else if (patient.breathing === false) {
+          category = 'RED';
+          reason = 'No breathing detected';
+          confidence = 0.9;
+        } else if (patient.breathing === true) {
+          category = 'GREEN';
+          reason = 'Breathing detected';
+          confidence = 0.7;
+        } else {
+          category = 'YELLOW';
+          reason = 'Breathing status unknown';
+          confidence = 0.5;
+        }
+
+        // Adjust based on movement
+        if (patient.movement === 'none') {
+          if (category === 'GREEN') {
+            category = 'YELLOW';
+            reason += ' - No movement detected';
+          }
+        }
+
+        const decision: TriageDecision = {
+          id: patient.id,
+          category,
+          confidence,
+          reason,
+          ts: Date.now()
+        };
+
+        newDecisions.set(patient.id, decision);
+        console.log(`🎭 Mock decision for ${patient.id}:`, decision);
+      });
+
+      setMockTriageDecisions(newDecisions);
+    }
+  }, [patients, connected]);
 
   // Video stream is handled by useMedia hook
   useEffect(() => {
@@ -51,8 +117,9 @@ const CameraAnalysis: React.FC = () => {
     if (videoRef.current && videoStream) {
       console.log('Setting video stream on element...');
       videoRef.current.srcObject = videoStream;
+      videoRef.current.playbackRate = playbackRate; // Set video playback speed
       videoRef.current.play().then(() => {
-        console.log('Video play started');
+        console.log(`Video play started at ${playbackRate}x speed`);
         setVideoElement(videoRef.current);
       }).catch(err => {
         console.error('Video play failed:', err);
@@ -106,6 +173,11 @@ const CameraAnalysis: React.FC = () => {
     }
     lastStateUpdateRef.current = now;
 
+    // Debug: Log all triage decisions
+    console.log('📊 All triage decisions:', Array.from(triageDecisions.entries()));
+    console.log('🔌 WebSocket connected:', connected);
+    console.log('👥 Current patients:', patients.length);
+
     // Update event log with new triage decisions
     triageDecisions.forEach(decision => {
       const existingEntry = eventLog.find(entry => entry.patient_id === decision.id && entry.ai);
@@ -145,7 +217,7 @@ const CameraAnalysis: React.FC = () => {
             ctx,
             videoWidth: canvas.width,
             videoHeight: canvas.height
-          }, patients, triageDecisions, fps, status);
+          }, patients, triageDecisions, fps, status, currentlyDetectedIds);
         }
       }
       
@@ -190,22 +262,22 @@ const CameraAnalysis: React.FC = () => {
     };
   }, [perceptionError, videoStream, isProcessing, patients.length]);
 
-  // Send patient states to backend (throttled) - COMMENTED OUT FOR NOW
-  // useEffect(() => {
-  //   if (patients.length > 0 && connected && isProcessing) {
-  //     patients.forEach(patient => {
-  //       const audioData = getAudioData();
-  //       const patientWithAudio: PatientState = {
-  //         ...patient,
-  //         audio: {
-  //           breathingPresent: audioData.breathingPresent,
-  //           snr: audioData.snr
-  //         }
-  //       };
-  //       sendPatientState(patientWithAudio);
-  //     });
-  //   }
-  // }, [patients, connected, isProcessing, sendPatientState, getAudioData]);
+  // Send patient states to backend (throttled)
+  useEffect(() => {
+    if (patients.length > 0 && connected && isProcessing) {
+      patients.forEach(patient => {
+        const audioData = getAudioData();
+        const patientWithAudio: PatientState = {
+          ...patient,
+          audio: {
+            breathingPresent: audioData.breathingPresent,
+            snr: audioData.snr
+          }
+        };
+        sendPatientState(patientWithAudio);
+      });
+    }
+  }, [patients, connected, isProcessing, sendPatientState, getAudioData]);
 
   // Handle camera start
   const handleStartCamera = useCallback(async () => {
@@ -283,7 +355,7 @@ const CameraAnalysis: React.FC = () => {
           </>
         )}
         
-                  {/* <button
+                  <button
                     onClick={() => handleExport('json')}
                     className="control-btn export"
                     disabled={!connected}
@@ -297,7 +369,31 @@ const CameraAnalysis: React.FC = () => {
                     disabled={!connected}
                   >
                     📊 Export CSV
-                  </button> */}
+                  </button>
+                  
+                  <div className="playback-control">
+                    <label htmlFor="playback-rate">Playback Speed:</label>
+                    <select
+                      id="playback-rate"
+                      value={playbackRate}
+                      onChange={(e) => {
+                        const newRate = parseFloat(e.target.value);
+                        setPlaybackRate(newRate);
+                        if (videoRef.current) {
+                          videoRef.current.playbackRate = newRate;
+                        }
+                      }}
+                      className="playback-select"
+                    >
+                      <option value={0.25}>0.25x (Very Slow)</option>
+                      <option value={0.5}>0.5x (Slow)</option>
+                      <option value={0.75}>0.75x (Slightly Slow)</option>
+                      <option value={1.0}>1.0x (Normal)</option>
+                      <option value={1.25}>1.25x (Slightly Fast)</option>
+                      <option value={1.5}>1.5x (Fast)</option>
+                      <option value={2.0}>2.0x (Very Fast)</option>
+                    </select>
+                  </div>
       </div>
 
       <div className="sidebar">
@@ -308,17 +404,22 @@ const CameraAnalysis: React.FC = () => {
           ) : (
             <div className="patients-list">
               {patients.map(patient => {
-                // const decision = triageDecisions.get(patient.id); // COMMENTED OUT FOR NOW
+                const decision = triageDecisions.get(patient.id);
+                const isCurrentlyDetected = currentlyDetectedIds.has(patient.id);
+                console.log(`🔍 Patient ${patient.id} decision:`, decision, 'detected:', isCurrentlyDetected);
                 return (
                   <div
                     key={patient.id}
-                    className="patient-card"
+                    className={`patient-card ${!isCurrentlyDetected ? 'out-of-frame' : ''}`}
                   >
                     <div className="patient-header">
                       <span className="patient-id">{patient.id}</span>
-                      <span className="triage-badge DETECTED">
-                        DETECTED
+                      <span className={`triage-badge ${decision?.category || 'UNKNOWN'}`}>
+                        {decision?.category || 'UNKNOWN'}
                       </span>
+                      {!isCurrentlyDetected && (
+                        <span className="out-of-frame-indicator">OUT OF FRAME</span>
+                      )}
                     </div>
                     
                     <div className="patient-details">
@@ -341,12 +442,12 @@ const CameraAnalysis: React.FC = () => {
                         <span>{(patient.det_conf * 100).toFixed(0)}%</span>
                       </div>
                       
-                      {/* {decision && (
+                      {decision && (
                         <div className="detail-row">
                           <span>Reason:</span>
                           <span className="reason-text">{decision.reason}</span>
                         </div>
-                      )} */}
+                      )}
                     </div>
                   </div>
                 );
